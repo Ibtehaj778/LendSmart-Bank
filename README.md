@@ -1,4 +1,4 @@
-# CrediLens AI Credit Analyzer
+# LendSmart AI Credit Analyzer
 
 A full-stack loan approval prediction application using machine learning models with an interactive Next.js frontend and Flask backend.
 
