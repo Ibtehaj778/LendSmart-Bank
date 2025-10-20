@@ -96,6 +96,7 @@ export default function Home() {
             predicted_class: predClass,
             key_reason,
             feature_contributions,
+            verdict: raw.verdict,
           }
         }
 
