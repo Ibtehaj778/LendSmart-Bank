@@ -57,17 +57,82 @@ export default function Home() {
   const handlePrediction = async (formData) => {
     setLoading(true)
     try {
+      const normalizeResponse = (raw) => {
+        // If backend returns new dictionary shape, adapt to UI expectations
+        if (raw && typeof raw === "object" && "probability" in raw && "prediction" in raw) {
+          const prob = Number(raw.probability) || 0
+          const predClass = Number(raw.prediction) || (prob > 0.5 ? 1 : 0)
+          const contrib = raw.shap_contribution || {}
+          const importance = raw.shap_importance || {}
+
+          const featureNames = Object.keys(contrib)
+          const maxImportance = featureNames.reduce((m, k) => Math.max(m, Math.abs(Number(importance[k]) || 0)), 0) || 1
+
+          const feature_contributions = featureNames
+            .map((name) => {
+              const contribution = Number(contrib[name]) || 0
+              const imp = Math.abs(Number(importance[name]) || 0)
+              const confidence = Math.min(1, imp / maxImportance)
+              return {
+                variable: name
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (c) => c.toUpperCase()),
+                contribution,
+                confidence,
+                description: name
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (c) => c.toUpperCase()),
+              }
+            })
+            .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+
+          const top = feature_contributions[0]
+          const key_reason = top
+            ? `${top.variable} is the primary factor (${top.contribution > 0 ? "increasing" : "decreasing"} default risk)`
+            : ""
+
+          return {
+            default_probability: prob,
+            predicted_class: predClass,
+            key_reason,
+            feature_contributions,
+          }
+        }
+
+        // Fallback: assume old shape already compatible
+        return raw
+      }
+
+      const buildBackendPayload = (f) => ({
+        Age: f.age,
+        Income: f.income,
+        LoanAmount: f.loan_amount,
+        CreditScore: f.credit_score,
+        MonthsEmployed: f.months_employed,
+        NumCreditLines: f.num_credit_lines,
+        InterestRate: f.interest_rate,
+        LoanTerm: f.loan_term,
+        DTIRatio: f.debt_to_income,
+        Education: f.education,
+        EmploymentType: f.employment_type,
+        MaritalStatus: f.marital_status,
+        HasMortgage: f.has_mortgage === "Yes" ? 1 : f.has_mortgage === "No" ? 0 : Number(f.has_mortgage) || 0,
+        HasDependents: f.has_dependents === "Yes" ? 1 : f.has_dependents === "No" ? 0 : Number(f.has_dependents) || 0,
+        LoanPurpose: f.loan_purpose,
+        HasCoSigner: f.has_cosigner === "Yes" ? 1 : f.has_cosigner === "No" ? 0 : Number(f.has_cosigner) || 0,
+      })
       const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL
       let data
       if (backendBase) {
         const res = await fetch(`${backendBase.replace(/\/$/, "")}/predict`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(buildBackendPayload(formData)),
         })
         if (!res.ok) throw new Error("Prediction failed")
         data = await res.json()
         // propagate identifiers for PDF and UI
+        data = normalizeResponse(data)
         data.applicant_name = formData.applicant_name
       } else {
         // Fallback to Next.js internal API routes if backend is not configured
@@ -78,6 +143,7 @@ export default function Home() {
         })
         if (!response.ok) throw new Error("Prediction failed")
         data = await response.json()
+        data = normalizeResponse(data)
         data.applicant_name = formData.applicant_name
 
         // Get NLP verdict from internal endpoint
