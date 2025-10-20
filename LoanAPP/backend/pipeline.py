@@ -450,7 +450,8 @@ def generate_verdict_with_gpt(prediction, form_data):
         f"Top factors: {top_factors}\n"
         f"Applicant: {json.dumps(form_data)[:400]}\n"
         f"SHAP contributions: {shap_json}\n"
-        "Recommend whether to approve or decline, with reasons."
+        "Recommend whether to approve or decline, with reasons.\n"
+        "IMPORTANT: Respond with plain text only. Do not use markdown formatting, code blocks, or any special formatting."
     )
     if not api_key:
         fallback = {
